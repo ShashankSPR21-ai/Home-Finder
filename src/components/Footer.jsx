@@ -1,58 +1,27 @@
-// ============================================================================
-// Footer.jsx - simple site footer with useful links and a note.
-// ============================================================================
+import React from 'react'
 
-import { IconHome } from './Icons'
-
-function Footer({ onBrowseClick, onCompareClick, onLogoClick }) {
-  // The year is computed so the footer never goes stale.
-  const year = new Date().getFullYear()
-
+export default function Footer({ onLogoClick, onBrowseClick, onCompareClick, onHistoryClick }) {
   return (
     <footer className="footer">
-      <div className="container footer-inner">
-        <div className="footer-brand">
-          <span className="brand">
-            <span className="brand-mark">
-              <IconHome size={18} />
-            </span>
-            <span className="brand-name">HomeFinder</span>
-          </span>
-          <p className="muted footer-tagline">
-            Find, filter and compare homes for sale and rent — all in one place.
-          </p>
-        </div>
-
-        <div className="footer-col">
-          <h4>Explore</h4>
-          <button type="button" className="footer-link" onClick={onLogoClick}>
-            Home
-          </button>
-          <button type="button" className="footer-link" onClick={onBrowseClick}>
-            All properties
-          </button>
-          <button type="button" className="footer-link" onClick={onCompareClick}>
-            Compare properties
-          </button>
-        </div>
-
-        <div className="footer-col">
-          <h4>Listing types</h4>
-          <button type="button" className="footer-link" onClick={() => onBrowseClick({ listingType: 'Buy' })}>
-            Properties to buy
-          </button>
-          <button type="button" className="footer-link" onClick={() => onBrowseClick({ listingType: 'Rent' })}>
-            Properties to rent
-          </button>
-        </div>
-      </div>
-
-      <div className="container footer-bottom">
-        <span className="muted">© {year} HomeFinder. Built for a hackathon demo.</span>
-        <span className="muted">Made with React, CSS &amp; Supabase</span>
+      <div className="footer-column">
+        <h3>EXPLORE</h3>
+        <ul>
+          <li>
+            <button onClick={onLogoClick}>Home</button>
+          </li>
+          <li>
+            <button onClick={() => onBrowseClick({})}>All properties</button>
+          </li>
+          <li>
+            <button onClick={onCompareClick}>Compare properties</button>
+          </li>
+          {onHistoryClick && (
+            <li>
+              <button onClick={onHistoryClick}>Search History</button>
+            </li>
+          )}
+        </ul>
       </div>
     </footer>
   )
 }
-
-export default Footer

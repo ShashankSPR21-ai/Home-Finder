@@ -1,252 +1,186 @@
-// ============================================================================
-// PropertyDetails.jsx
-//
-// The full page for ONE property: large image, every field and an Enquire
-// button that opens a small contact modal (no backend, purely a demo).
-// ============================================================================
+import React, { useState } from 'react'
+import { supabase } from '../lib/supabaseClient'
 
-import { useState } from 'react'
-import { formatPrice, formatCount, formatArea, isRent, FALLBACK_IMAGE } from '../lib/format'
-import {
-  IconArrowLeft,
-  IconPin,
-  IconBed,
-  IconBath,
-  IconArea,
-  IconHome,
-  IconCompare,
-  IconCheck,
-  IconMail,
-  IconPhone,
-  IconClose,
-} from './Icons'
-
-function PropertyDetails({
+export default function PropertyDetails({
   property,
   onBack,
   onToggleCompare,
   isCompared,
   compareDisabled,
 }) {
-  // Local state just for the enquiry modal.
-  const [enquiryOpen, setEnquiryOpen] = useState(false)
-  const [sent, setSent] = useState(false)
+  const [formData, setFormData] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    message: '',
+  })
+  const [submitting, setSubmitting] = useState(false)
+  const [submitted, setSubmitted] = useState(false)
+  const [errorMsg, setErrorMsg] = useState('')
 
-  // Defensive guard: if the property is missing, show a friendly message
-  // instead of crashing.
   if (!property) {
     return (
-      <div className="container details-empty">
+      <div className="container" style={{ padding: '40px 20px', textAlign: 'center' }}>
         <h2>Property not found</h2>
-        <p className="muted">That listing is no longer available.</p>
-        <button type="button" className="btn btn-primary" onClick={onBack}>
+        <button onClick={onBack} style={{ marginTop: '15px' }}>
           Back to listings
         </button>
       </div>
     )
   }
 
-  const rent = isRent(property)
+  const handleChange = (e) => {
+    const { name, value } = e.target
+    setFormData((prev) => ({ ...prev, [name]: value }))
+  }
 
-  const closeEnquiry = () => {
-    setEnquiryOpen(false)
-    setSent(false)
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    setSubmitting(true)
+    setErrorMsg('')
+
+    if (supabase) {
+      const { error } = await supabase.from('enquiries').insert([
+        {
+          property_id: String(property.id),
+          name: formData.name,
+          email: formData.email,
+          phone: formData.phone,
+          message: formData.message,
+        },
+      ])
+
+      if (error) {
+        console.error('Error saving enquiry:', error.message)
+        setErrorMsg('Failed to send enquiry. Please try again.')
+        setSubmitting(false)
+        return
+      }
+    }
+
+    setSubmitting(false)
+    setSubmitted(true)
+    setFormData({ name: '', email: '', phone: '', message: '' })
   }
 
   return (
-    <div className="container details">
-      {/* Back link */}
-      <button type="button" className="btn btn-ghost btn-sm back-link" onClick={onBack}>
-        <IconArrowLeft size={16} />
-        Back to listings
+    <div className="container property-details-page" style={{ padding: '30px 20px' }}>
+      <button onClick={onBack} style={{ marginBottom: '20px', cursor: 'pointer' }}>
+        ← Back to listings
       </button>
 
-      {/* Large image with the Buy/Rent badge */}
-      <div className="details-media">
-        <img
-          src={property.image_url || FALLBACK_IMAGE}
-          alt={property.title}
-          onError={(event) => {
-            event.currentTarget.onerror = null
-            event.currentTarget.src = FALLBACK_IMAGE
-          }}
-        />
-        <span className={`badge ${rent ? 'badge-rent' : 'badge-buy'} details-badge`}>
-          {rent ? 'For Rent' : 'For Sale'}
-        </span>
-      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '30px' }}>
+        {/* Left Column: Details */}
+        <div>
+          <img
+            src={property.image_url || property.image}
+            alt={property.title}
+            style={{ width: '100%', borderRadius: '8px', objectFit: 'cover', maxHeight: '400px' }}
+          />
+          <h1 style={{ marginTop: '15px', marginBottom: '5px' }}>{property.title}</h1>
+          <p style={{ color: '#666', fontSize: '1.1rem' }}>{property.location}</p>
+          <h2 style={{ color: '#2563eb', margin: '15px 0' }}>
+            ₹{property.price?.toLocaleString()}
+            {property.listing_type === 'Rent' ? ' / month' : ''}
+          </h2>
 
-      <div className="details-layout">
-        {/* -------------------------------------------------------------
-            Left column: all the information
-           ------------------------------------------------------------- */}
-        <div className="details-main">
-          <h1 className="details-title">{property.title}</h1>
-
-          <p className="details-location">
-            <IconPin size={17} />
-            <span>{property.location}</span>
-          </p>
-
-          <div className="details-price">
-            {formatPrice(property.price, { perMonth: rent })}
+          <div style={{ display: 'flex', gap: '20px', margin: '20px 0', background: '#f8fafc', padding: '15px', borderRadius: '8px' }}>
+            <div><strong>Bedrooms:</strong> {property.bedrooms}</div>
+            <div><strong>Bathrooms:</strong> {property.bathrooms}</div>
+            <div><strong>Area:</strong> {property.sqft} sq.ft</div>
           </div>
 
-          {/* Key specs */}
-          <div className="specs">
-            <div className="spec">
-              <IconBed size={20} />
-              <span className="spec-value">{formatCount(property.bedrooms)}</span>
-              <span className="spec-label">Bedrooms</span>
-            </div>
-            <div className="spec">
-              <IconBath size={20} />
-              <span className="spec-value">{formatCount(property.bathrooms)}</span>
-              <span className="spec-label">Bathrooms</span>
-            </div>
-            <div className="spec">
-              <IconArea size={20} />
-              <span className="spec-value">{formatArea(property.area)}</span>
-              <span className="spec-label">Size</span>
-            </div>
-            <div className="spec">
-              <IconHome size={20} />
-              <span className="spec-value">{property.type}</span>
-              <span className="spec-label">Type</span>
-            </div>
-          </div>
+          <p>{property.description}</p>
 
-          {/* Description */}
-          <div className="details-block">
-            <h2 className="details-block-title">Description</h2>
-            <p className="details-description">
-              {property.description || 'No description has been added for this listing yet.'}
-            </p>
-          </div>
+          <button
+            onClick={() => onToggleCompare(property.id)}
+            disabled={compareDisabled && !isCompared}
+            style={{ marginTop: '20px', padding: '10px 20px', cursor: 'pointer' }}
+          >
+            {isCompared ? 'Remove from Compare' : 'Add to Compare'}
+          </button>
         </div>
 
-        {/* -------------------------------------------------------------
-            Right column: sticky action card
-           ------------------------------------------------------------- */}
-        <aside className="details-side">
-          <div className="side-card">
-            <h3 className="side-card-title">Interested in this property?</h3>
-            <p className="muted side-card-text">
-              Send a quick enquiry and the agent will get back to you.
-            </p>
-
-            <button
-              type="button"
-              className="btn btn-primary btn-block"
-              onClick={() => setEnquiryOpen(true)}
-            >
-              <IconMail size={17} />
-              Enquire now
-            </button>
-
-            {/* Add / remove from compare */}
-            <button
-              type="button"
-              className={`btn btn-block ${isCompared ? 'btn-outline is-selected' : 'btn-outline'}`}
-              onClick={() => onToggleCompare(property.id)}
-              disabled={compareDisabled && !isCompared}
-            >
-              {isCompared ? <IconCheck size={17} /> : <IconCompare size={17} />}
-              {isCompared ? 'In comparison' : 'Add to compare'}
-            </button>
-
-            <div className="side-agent">
-              <span className="side-agent-avatar">{property.title.charAt(0)}</span>
-              <div>
-                <div className="side-agent-name">HomeFinder Agent</div>
-                <div className="muted side-agent-phone">
-                  <IconPhone size={13} /> +91 98765 43210
-                </div>
-              </div>
-            </div>
-          </div>
-        </aside>
-      </div>
-
-      {/* ---------------------------------------------------------------
-          Enquiry modal - local state only, nothing is stored.
-         --------------------------------------------------------------- */}
-      {enquiryOpen && (
-        <div className="modal-backdrop" onClick={closeEnquiry}>
-          <div
-            className="modal"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Enquire about this property"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="modal-head">
-              <h3 className="modal-title">Enquire about {property.title}</h3>
-              <button
-                type="button"
-                className="modal-close"
-                onClick={closeEnquiry}
-                aria-label="Close enquiry form"
-              >
-                <IconClose size={18} />
+        {/* Right Column: Enquiry Form */}
+        <div style={{ background: '#f8fafc', padding: '25px', borderRadius: '8px', height: 'fit-content' }}>
+          <h3>Enquire About This Property</h3>
+          
+          {submitted ? (
+            <div style={{ color: '#16a34a', padding: '15px 0' }}>
+              <p><strong>Thank you!</strong> Your enquiry has been submitted successfully.</p>
+              <button onClick={() => setSubmitted(false)} style={{ marginTop: '10px' }}>
+                Send another enquiry
               </button>
             </div>
+          ) : (
+            <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '15px', marginTop: '15px' }}>
+              {errorMsg && <p style={{ color: '#dc2626', margin: 0 }}>{errorMsg}</p>}
 
-            {sent ? (
-              // Success message after submitting
-              <div className="modal-success">
-                <span className="modal-success-icon">
-                  <IconCheck size={26} />
-                </span>
-                <h4>Thanks! Your enquiry has been noted.</h4>
-                <p className="muted">
-                  This is a demo form — no message is actually sent.
-                </p>
-                <button type="button" className="btn btn-primary" onClick={closeEnquiry}>
-                  Close
-                </button>
+              <div>
+                <label style={{ display: 'block', marginBottom: '5px', fontSize: '0.9rem' }}>Full Name *</label>
+                <input
+                  type="text"
+                  name="name"
+                  required
+                  value={formData.name}
+                  onChange={handleChange}
+                  style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #ccc' }}
+                />
               </div>
-            ) : (
-              <form
-                className="modal-form"
-                onSubmit={(event) => {
-                  event.preventDefault() // stop the page reload
-                  setSent(true)
+
+              <div>
+                <label style={{ display: 'block', marginBottom: '5px', fontSize: '0.9rem' }}>Email Address *</label>
+                <input
+                  type="email"
+                  name="email"
+                  required
+                  value={formData.email}
+                  onChange={handleChange}
+                  style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #ccc' }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', marginBottom: '5px', fontSize: '0.9rem' }}>Phone Number</label>
+                <input
+                  type="tel"
+                  name="phone"
+                  value={formData.phone}
+                  onChange={handleChange}
+                  style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #ccc' }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', marginBottom: '5px', fontSize: '0.9rem' }}>Message</label>
+                <textarea
+                  name="message"
+                  rows="4"
+                  value={formData.message}
+                  onChange={handleChange}
+                  placeholder="I am interested in this property..."
+                  style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #ccc' }}
+                ></textarea>
+              </div>
+
+              <button
+                type="submit"
+                disabled={submitting}
+                style={{
+                  padding: '10px',
+                  background: '#2563eb',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: submitting ? 'not-allowed' : 'pointer',
                 }}
               >
-                <div className="field">
-                  <label htmlFor="enq-name">Your name</label>
-                  <input id="enq-name" className="input" required placeholder="Full name" />
-                </div>
-                <div className="field">
-                  <label htmlFor="enq-email">Email</label>
-                  <input
-                    id="enq-email"
-                    className="input"
-                    type="email"
-                    required
-                    placeholder="you@example.com"
-                  />
-                </div>
-                <div className="field">
-                  <label htmlFor="enq-message">Message</label>
-                  <textarea
-                    id="enq-message"
-                    className="input"
-                    rows="3"
-                    defaultValue={`I am interested in ${property.title} at ${property.location}. Please share more details.`}
-                  />
-                </div>
-                <button type="submit" className="btn btn-primary btn-block">
-                  Send enquiry
-                </button>
-              </form>
-            )}
-          </div>
+                {submitting ? 'Sending...' : 'Submit Enquiry'}
+              </button>
+            </form>
+          )}
         </div>
-      )}
+      </div>
     </div>
   )
 }
-
-export default PropertyDetails

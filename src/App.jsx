@@ -1,17 +1,5 @@
 // ============================================================================
 // App.jsx  —  the "brain" of the application.
-//
-// WHAT LIVES HERE (all the shared state):
-//   page        - which screen is showing (home / listings / details / compare)
-//   properties  - every listing, loaded once from Supabase
-//   filters     - the current search + filter values
-//   compareIds  - the ids of the properties selected for comparison (max 3)
-//   toast       - a small temporary message at the bottom
-//
-// There is NO routing library. Instead we keep a tiny "page" object in state
-// and decide which component to render. For a 4-screen hackathon app this is
-// simpler than installing and configuring React Router, and it is easy to
-// explain in a presentation.
 // ============================================================================
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -23,11 +11,13 @@ import SearchFilter from './components/SearchFilter'
 import PropertyList from './components/PropertyList'
 import PropertyDetails from './components/PropertyDetails'
 import CompareProperties from './components/CompareProperties'
+import SearchHistory from './components/SearchHistory'
 import CompareBar from './components/CompareBar'
 import Footer from './components/Footer'
 
-// Data helpers
+// Data helpers & Supabase
 import { fetchProperties, filterProperties } from './lib/propertyApi'
+import { supabase } from './lib/supabaseClient'
 
 import './App.css'
 
@@ -45,7 +35,7 @@ const MAX_COMPARE = 3
 
 function App() {
   // ---- Screen navigation -------------------------------------------------
-  // page.name is one of: 'home' | 'listings' | 'details' | 'compare'
+  // page.name is one of: 'home' | 'listings' | 'details' | 'compare' | 'history'
   const [page, setPage] = useState({ name: 'home', propertyId: null })
 
   // ---- Data --------------------------------------------------------------
@@ -109,7 +99,7 @@ function App() {
   }, [])
 
   // ------------------------------------------------------------------------
-  // 4. Navigation helpers used by the child components.
+  // 4. Navigation & Search helpers
   // ------------------------------------------------------------------------
 
   // Go to the home page.
@@ -117,18 +107,29 @@ function App() {
 
   /**
    * Open the listings page with new filters.
-   * We always start from EMPTY_FILTERS so the result is predictable, then
-   * apply whatever the caller asked for (e.g. { listingType: 'Rent' }).
    */
   const browse = (partialFilters = {}) => {
     setFilters({ ...EMPTY_FILTERS, ...partialFilters })
     setPage({ name: 'listings', propertyId: null })
   }
 
-  // Used by the hero search box: keep any other filters, set the location.
-  const searchFromHome = (term) => {
-    setFilters({ ...EMPTY_FILTERS, location: term })
+  // Used by the hero search box: keep any other filters, set the location,
+  // and log search to Supabase search_history table.
+  const searchFromHome = async (term) => {
+    const trimmed = term.trim()
+    setFilters({ ...EMPTY_FILTERS, location: trimmed })
     setPage({ name: 'listings', propertyId: null })
+
+    // Insert into Supabase search_history
+    if (trimmed && supabase) {
+      const { error } = await supabase
+        .from('search_history')
+        .insert([{ query: trimmed, filters: { location: trimmed } }])
+      
+      if (error) {
+        console.error('Failed to log search history:', error.message)
+      }
+    }
   }
 
   // Open one property's detail page.
@@ -138,6 +139,8 @@ function App() {
 
   const openCompare = () => setPage({ name: 'compare', propertyId: null })
 
+  const openHistory = () => setPage({ name: 'history', propertyId: null })
+
   const backToListings = () => setPage({ name: 'listings', propertyId: null })
 
   // ------------------------------------------------------------------------
@@ -145,12 +148,10 @@ function App() {
   // ------------------------------------------------------------------------
   const toggleCompare = (id) => {
     setCompareIds((current) => {
-      // Already selected -> remove it.
       if (current.includes(id)) {
         return current.filter((existingId) => existingId !== id)
       }
 
-      // Full -> warn instead of adding a fourth.
       if (current.length >= MAX_COMPARE) {
         showToast(`You can compare up to ${MAX_COMPARE} properties at a time.`)
         return current
@@ -171,7 +172,7 @@ function App() {
   }
 
   // ------------------------------------------------------------------------
-  // 6. Derived values - calculated from state, never stored twice.
+  // 6. Derived values
   // ------------------------------------------------------------------------
 
   // Which properties match the current filters.
@@ -180,8 +181,6 @@ function App() {
     [properties, filters]
   )
 
-  // The actual property objects for the comparison bar / page.
-  // (comparison stores ids, so we look the objects up here)
   const compareProperties = useMemo(
     () =>
       compareIds
@@ -190,14 +189,12 @@ function App() {
     [compareIds, properties]
   )
 
-  // The property shown on the details page.
   const detailProperty = useMemo(
     () =>
       properties.find((p) => String(p.id) === String(page.propertyId)) || null,
     [properties, page.propertyId]
   )
 
-  // Do any filters differ from the defaults?
   const hasActiveFilters =
     filters.location.trim() !== '' ||
     filters.listingType !== 'All' ||
@@ -208,7 +205,7 @@ function App() {
   const resetFilters = () => setFilters(EMPTY_FILTERS)
 
   // ------------------------------------------------------------------------
-  // 7. Render the correct screen.
+  // 7. Render
   // ------------------------------------------------------------------------
   return (
     <div className="app">
@@ -216,11 +213,12 @@ function App() {
         onLogoClick={goHome}
         onBrowseClick={() => browse({})}
         onCompareClick={openCompare}
+        onHistoryClick={openHistory}
         compareCount={compareIds.length}
         onRemoveCompare={clearCompare}
       />
 
-      {/* Banner shown when we are displaying the fallback sample data */}
+      {/* Banner shown when we are displaying fallback sample data */}
       {dataSource === 'sample' && dataMessage && (
         <div className="data-banner">
           <div className="container data-banner-inner">
@@ -231,7 +229,7 @@ function App() {
       )}
 
       <main className="app-content">
-        {/* ---------------------------------------------- HOME */}
+        {/* HOME */}
         {page.name === 'home' && (
           <Home
             properties={properties}
@@ -244,7 +242,7 @@ function App() {
           />
         )}
 
-        {/* ---------------------------------------------- LISTINGS */}
+        {/* LISTINGS */}
         {page.name === 'listings' && (
           <div className="container listings">
             <div className="listings-head">
@@ -256,7 +254,6 @@ function App() {
               </p>
             </div>
 
-            {/* The filter panel */}
             <SearchFilter
               filters={filters}
               onChange={setFilters}
@@ -265,7 +262,6 @@ function App() {
               resultCount={visibleProperties.length}
             />
 
-            {/* The grid of cards (handles loading / empty states itself) */}
             <PropertyList
               properties={visibleProperties}
               loading={loading}
@@ -278,7 +274,7 @@ function App() {
           </div>
         )}
 
-        {/* ---------------------------------------------- DETAILS */}
+        {/* DETAILS */}
         {page.name === 'details' && (
           <PropertyDetails
             property={detailProperty}
@@ -289,7 +285,7 @@ function App() {
           />
         )}
 
-        {/* ---------------------------------------------- COMPARE */}
+        {/* COMPARE */}
         {page.name === 'compare' && (
           <CompareProperties
             properties={compareProperties}
@@ -298,9 +294,11 @@ function App() {
             onBrowse={browse}
           />
         )}
+
+        {/* SEARCH HISTORY */}
+        {page.name === 'history' && <SearchHistory />}
       </main>
 
-      {/* Floating bar with the selected properties */}
       <CompareBar
         properties={compareProperties}
         onOpenCompare={openCompare}
@@ -308,10 +306,14 @@ function App() {
         onClear={clearCompare}
       />
 
-      {/* Small temporary message */}
       {toast && <div className="toast">{toast}</div>}
 
-      <Footer onLogoClick={goHome} onBrowseClick={browse} onCompareClick={openCompare} />
+      <Footer
+        onLogoClick={goHome}
+        onBrowseClick={browse}
+        onCompareClick={openCompare}
+        onHistoryClick={openHistory}
+      />
     </div>
   )
 }
